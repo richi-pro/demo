@@ -282,7 +282,13 @@ Tablas_Vida_Oaxaca <- map(Lista_Datos, crear_tabla_mortalidad)
 ```
 
 ```{r}
+print(Tablas_Vida_Oaxaca$`Mujer.2010`)
+print(Tablas_Vida_Oaxaca$`Hombre.2010`)
+print(Tablas_Vida_Oaxaca$`Mujer.2019`)
+print(Tablas_Vida_Oaxaca$`Hombre.2019`)
 print(Tablas_Vida_Oaxaca$`Mujer.2021`)
+print(Tablas_Vida_Oaxaca$`Hombre.2021`)
+
 ```
 
 ## Esperanzas de vida.
@@ -324,3 +330,163 @@ kable(
 ```
 
 ## Gráficas de apoyo.
+
+```{r}
+# ==============================================================================
+# FASE 5: VISUALIZACIÓN ACTUARIAL (Lx, mx, qx)
+# ==============================================================================
+
+# 1. Unimos las tablas y creamos un eje X matemático continuo
+Tablas_Graficas <- bind_rows(Tablas_Vida_Oaxaca, .id = "Categoria") |> 
+  separate(Categoria, into = c("Sexo", "Ano"), sep = "\\.") |> 
+  # Extraemos solo el primer número de la edad para tener un eje continuo (0, 5, 10...)
+  mutate(x_exacta = parse_number(Edad))
+# ---------------------------------------------------------
+# GRÁFICO 1: Años Persona Vividos (Lx) - Escala Lineal
+# ---------------------------------------------------------
+grafico_Lx <- ggplot(Tablas_Graficas, aes(x = x_exacta, y = Lx, color = Ano)) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~Sexo) + # Divide la gráfica en dos paneles (Hombres y Mujeres)
+  theme_minimal(base_size = 12) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = seq(0, 85, by = 10)) + # Marcas cada 10 años
+  labs(
+    title = "Estructura de Supervivencia de la Población (Lx)",
+    subtitle = "Estado de Oaxaca (2010, 2019, 2021)",
+    x = "Edad Exacta (x)",
+    y = "Años Persona Vividos en el Intervalo (Lx)",
+    color = "Año"
+  )
+
+# Imprimimos el primer gráfico
+grafico_Lx
+
+# ---------------------------------------------------------
+# GRÁFICO 2: Tasa Central de Mortalidad (mx) - ESCALA LOGARÍTMICA
+# ---------------------------------------------------------
+grafico_mx <- ggplot(Tablas_Graficas, aes(x = x_exacta, y = mx, color = Ano)) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~Sexo) +
+  theme_minimal(base_size = 12) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = seq(0, 85, by = 10)) +
+  scale_y_log10(labels = scales::comma) +  # <--- MAGIA: Escala Logarítmica
+  labs(
+    title = "Tasa Central de Mortalidad (mx) - Escala Logarítmica",
+    subtitle = "Estado de Oaxaca (2010, 2019, 2021)",
+    x = "Edad Exacta (x)",
+    y = "mx (Base Log 10)",
+    color = "Año"
+  )
+
+# Imprimimos el segundo gráfico
+grafico_mx
+
+# ---------------------------------------------------------
+# GRÁFICO 3: Probabilidad de Morir (qx) - ESCALA LOGARÍTMICA
+# ---------------------------------------------------------
+grafico_qx <- ggplot(Tablas_Graficas, aes(x = x_exacta, y = qx, color = Ano)) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~Sexo) +
+  theme_minimal(base_size = 12) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = seq(0, 85, by = 10)) +
+  scale_y_log10(labels = scales::comma) + # <--- MAGIA: Escala Logarítmica
+  labs(
+    title = "Probabilidad de Morir en el Intervalo (qx) - Escala Logarítmica",
+    subtitle = "Estado de Oaxaca (2010, 2019, 2021)",
+    x = "Edad Exacta (x)",
+    y = "qx (Base Log 10)",
+    color = "Año"
+  )
+
+# Imprimimos el tercer gráfico
+grafico_qx
+```
+
+```{r}
+# ---------------------------------------------------------
+# GRÁFICO 4: Curva de Supervivencia (lx) - Escala Lineal
+# ---------------------------------------------------------
+grafico_lx <- ggplot(Tablas_Graficas, aes(x = x_exacta, y = lx, color = Ano)) +
+  geom_line(linewidth = 1) +
+  facet_wrap(~Sexo) +
+  theme_minimal(base_size = 12) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = seq(0, 85, by = 10)) +
+  scale_y_continuous(labels = scales::comma) + # Usamos comas para el 100,000
+  labs(
+    title = "Curva de Supervivencia (lx)",
+    subtitle = "Sobrevivientes exactos de una cohorte inicial de 100,000 nacimientos",
+    x = "Edad Exacta (x)",
+    y = "Sobrevivientes (lx)",
+    color = "Año"
+  )
+
+# Imprimimos el cuarto gráfico
+grafico_lx
+```
+
+```{r}
+# ==============================================================================
+# FASE 6: ANÁLISIS DE BRECHA DEMOGRÁFICA (Diferencia lx 2019 vs 2021)
+# ==============================================================================
+
+# 1. Transformación de datos: Aislamos 2019 y 2021, y calculamos la diferencia
+Datos_Brecha <- Tablas_Graficas |> 
+  # Nos quedamos solo con los años de interés
+  filter(Ano %in% c("2019", "2021")) |> 
+  # Seleccionamos las columnas clave
+  select(Sexo, Ano, x_exacta, lx) |> 
+  # Moldeamos: Ponemos los años como columnas (lx_2019 y lx_2021)
+  pivot_wider(
+    names_from = Ano, 
+    values_from = lx, 
+    names_prefix = "lx_"
+  ) |> 
+  # Calculamos el déficit: ¿Cuántos sobrevivientes perdió el 2021 respecto al 2019?
+  mutate(Deficit_lx = lx_2019 - lx_2021)
+
+# 2. Generación del Gráfico
+grafico_brecha <- ggplot(Datos_Brecha, aes(x = x_exacta, y = Deficit_lx, fill = Sexo)) +
+  # Usamos un gráfico de área para que el impacto visual de las "vidas perdidas" sea dramático
+  geom_area(alpha = 0.7) +
+  # Línea de referencia en cero (donde no hay diferencia entre años)
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  facet_wrap(~Sexo) +
+  theme_minimal(base_size = 12) +
+  scale_fill_manual(values = c("Hombre" = "#377eb8", "Mujer" = "#e41a1c")) +
+  scale_x_continuous(breaks = seq(0, 85, by = 10)) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Déficit de Supervivencia por COVID-19",
+    subtitle = "Diferencia de Sobrevivientes (lx 2019 - lx 2021) en Oaxaca",
+    x = "Edad Exacta (x)",
+    y = "Vidas Perdidas en la Cohorte (lx 2019 - lx 2021)",
+    fill = "Sexo"
+  ) +
+  theme(legend.position = "none") # Ocultamos la leyenda porque los paneles ya lo explican
+
+# Imprimimos el gráfico
+grafico_brecha
+```
+
+## Conclusiones.
+
+El presente análisis de las Tablas de Mortalidad para el estado de Oaxaca revela que la pandemia de COVID-19 no solo representó una crisis sanitaria, sino que alteró drásticamente la estructura de supervivencia de la población, alterando la tendencia de décadas de progreso en salud pública.
+
+Para apoyar dicha conclusión, vemos que a partir de la pandemia se presentaron los siguientes fenómenos estructurales.
+
+### 1. El Colapso de la Esperanza de Vida al Nacer ($e_0$) y la Sobremortalidad Masculina.
+
+Entre 2010 y 2019, Oaxaca mostraba la tendencia clásica de la transición demográfica: una mejora sostenida en la esperanza de vida para ambos sexos. Sin embargo, los datos de 2021 evidencian una caída vertical en este indicador.
+
+Además, el choque fue asimétrico por sexo. La estructura de las tablas demuestra que la sobremortalidad masculina se exacerbó severamente; la brecha entre la esperanza de vida de hombres y mujeres se amplió, confirmando que el virus y las comorbilidades asociadas en el estado tuvieron un factor de letalidad mucho más agresivo en la población masculina, la razón de esto es posiblemente compleja, pero algo que puede haber contribuido es que en Oaxaca se tiene una cultura con rasgos machistas que fomenta que los hombres "aguanten" más porque "hay que ser fuerte", asimismo, el alcoholismo está mejor visto en hombres que en mujeres.
+
+### 2. La Deformación de las Tasas de Mortalidad ($m_x$ y $q_x$).
+
+Al analizar las curvas logarítmicas de las probabilidades de muerte ($q_x$), se observa una ruptura del patrón histórico. Mientras que la mortalidad infantil y juvenil (0 a 20 años) se mantuvo relativamente estable y resiliente ante la pandemia, la curva del año 2021 se despega violentamente hacia arriba a partir de los 40 años. Las edades adultas y geriátricas experimentaron un incremento exponencial en sus tasas de riesgo, rompiendo la tendencia de "rectangularización" que la medicina moderna había logrado hasta 2019.
+
+### 3. El Déficit de Supervivencia.
+
+Este fue un hallazgo triste para nosotros. La última tabla cuantifica las vidas perdidas y nos muestra una enorme montaña de vidas perdidas que comienza a elevarse a partir de los 45 años y alcanza su pico máximo en los grupos de 60 a 75 años. Esta área bajo la curva representa a los oaxaqueños que, bajo condiciones normales de mortalidad prepandemia (2019), habrían sobrevivido, pero cuyas vidas fueron truncadas abruptamente en 2020.
